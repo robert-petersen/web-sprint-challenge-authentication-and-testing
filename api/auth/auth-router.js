@@ -1,7 +1,26 @@
 const router = require('express').Router();
+const bcryptjs = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const Jokes = require("../jokes/jokes-model.js");
+const { jwtSecret } = require('../../config/secrets.js')
 
 router.post('/register', (req, res) => {
-  res.end('implement register, please!');
+  const credentials = req.body
+  if (isValid(credentials)) {
+    const hash = bcryptjs.hashSync(credentials.password, 10);
+    credentials.password = hash;
+    Jokes.add(credentials)
+      .then(user => {
+        res.status(201).json({ body: user });
+      })
+      .catch(error => {
+        res.status(500).json({ body: "username taken", message: error.message });
+      });
+  } else {
+    res.status(400).json({
+      message: "username and password required"
+    });
+  }
   /*
     IMPLEMENT
     You are welcome to build additional middlewares to help with the endpoint's functionality.
@@ -29,7 +48,25 @@ router.post('/register', (req, res) => {
 });
 
 router.post('/login', (req, res) => {
-  res.end('implement login, please!');
+  const { username, password } = req.body;
+  if (isValid(req.body)) {
+    Jokes.findBy({ username: username })
+      .then(([user]) => {
+        if (user && bcryptjs.compareSync(password, user.password)) {
+          const token = generateToken(user)
+          res.status(200).json({ message: "Welcome!", token });
+        } else {
+          res.status(401).json({ message: "invalid credentials" });
+        }
+      })
+      .catch(error => {
+        res.status(500).json({ message: error.message });
+      });
+  } else {
+    res.status(400).json({
+      message: "username and password required"
+    });
+  }
   /*
     IMPLEMENT
     You are welcome to build additional middlewares to help with the endpoint's functionality.
@@ -54,5 +91,21 @@ router.post('/login', (req, res) => {
       the response body should include a string exactly as follows: "invalid credentials".
   */
 });
+
+function isValid(user) {
+  return Boolean(user.username && user.password && typeof user.password === "string");
+}
+
+function generateToken(user) {
+  const payload = {
+    subject: user.id,
+    username: user.username
+  }
+  const options = {
+    expiresIn: "1d",
+  }
+
+  return jwt.sign(payload, jwtSecret, options)
+}
 
 module.exports = router;
